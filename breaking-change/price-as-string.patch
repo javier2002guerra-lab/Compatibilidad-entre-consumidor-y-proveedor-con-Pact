@@ -1,0 +1,11 @@
+--- a/src/provider/app.ts
++++ b/src/provider/app.ts
+@@ -24,7 +24,7 @@
+     return res.status(200).json({
+       id: product.id,
+       name: product.name,
+-      price: product.price,
++      price: product.price.toFixed(2), // CAMBIO INCOMPATIBLE: el precio pasa de number a string
+       currency: product.currency,
+       stock: product.stock,
+       updatedAt: product.updatedAt.toISOString(),
