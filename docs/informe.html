@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Compatibilidad consumidor-proveedor con Pact</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm 18mm 16mm; }
+  :root { --ink:#1d2433; --muted:#5b6475; --accent:#3a4fd8; --line:#d9dde6; --soft:#f3f5f9; --ok:#1f7a3d; --bad:#b42318; }
+  body { font-family: "Segoe UI", Calibri, Arial, sans-serif; color: var(--ink); font-size: 10.5pt; line-height: 1.45; margin: 0; background:#fff; }
+  h1 { font-size: 22pt; margin: 0 0 4px; line-height: 1.15; }
+  h2 { font-size: 14pt; margin: 22px 0 8px; padding-bottom: 4px; border-bottom: 2px solid var(--accent); break-after: avoid; }
+  h3 { font-size: 11.5pt; margin: 16px 0 6px; break-after: avoid; }
+  p { margin: 6px 0; }
+  code, .mono { font-family: Consolas, "Cascadia Mono", monospace; font-size: 9.3pt; background: var(--soft); padding: 0 3px; border-radius: 3px; }
+  a { color: var(--accent); }
+  table { border-collapse: collapse; width: 100%; margin: 8px 0; font-size: 9.4pt; break-inside: avoid; }
+  th, td { border: 1px solid var(--line); padding: 5px 7px; text-align: left; vertical-align: top; }
+  th { background: var(--soft); }
+  .cover { border-left: 6px solid var(--accent); padding: 6px 0 6px 16px; margin-bottom: 18px; }
+  .sub { color: var(--muted); font-size: 11pt; margin-top: 4px; }
+  .meta td:first-child { width: 28%; font-weight: 600; background: var(--soft); }
+  figure { margin: 10px 0 14px; break-inside: avoid; }
+  figure img { width: 100%; border: 1px solid var(--line); border-radius: 4px; }
+  figcaption { font-size: 9pt; color: var(--muted); margin-top: 4px; }
+  .ev { break-inside: avoid; }
+  .interp { background: var(--soft); border-radius: 6px; padding: 8px 12px; margin: 6px 0 4px; font-size: 9.8pt; }
+  .interp b { display: inline-block; min-width: 88px; }
+  .ok { color: var(--ok); font-weight: 700; } .bad { color: var(--bad); font-weight: 700; }
+  .note { border-left: 4px solid #e0a100; background: #fff8e5; padding: 6px 10px; margin: 8px 0; font-size: 9.8pt; }
+  pre { font-family: Consolas, monospace; font-size: 8.8pt; background: var(--soft); padding: 8px 10px; border-radius: 4px; white-space: pre-wrap; margin: 6px 0; break-inside: avoid; }
+  .pb { break-before: page; }
+  svg text { font-family: "Segoe UI", Arial, sans-serif; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <h1>Compatibilidad entre consumidor y proveedor con Pact</h1>
+  <div class="sub">Pruebas de contrato dirigidas por el consumidor en TypeScript · Informe de evidencias</div>
+</div>
+
+<table class="meta">
+  <tr><td>Autor</td><td>Javier Guerra</td></tr>
+  <tr><td>Fecha</td><td>30 de octubre de 2026</td></tr>
+  <tr><td>Repositorio</td><td><a href="https://github.com/javier2002guerra-lab/Compatibilidad-entre-consumidor-y-proveedor-con-Pact">github.com/javier2002guerra-lab/Compatibilidad-entre-consumidor-y-proveedor-con-Pact</a></td></tr>
+  <tr><td>Versión entregada</td><td>Etiqueta <b>v1.0.0</b>: <a href="https://github.com/javier2002guerra-lab/Compatibilidad-entre-consumidor-y-proveedor-con-Pact/tree/v1.0.0">…/tree/v1.0.0</a><br>Código ejecutado en las capturas: commit <code>863e5fe</code></td></tr>
+  <tr><td>Tecnologías</td><td>Node.js 22.10.0 · TypeScript 5.9.3 · @pact-foundation/pact 13.2.0 (especificación Pact V4) · Jest 29.7.0 + ts-jest · Express 4.22.3</td></tr>
+</table>
+
+<h2>1. Contexto del caso</h2>
+<p>Se implementó un caso pequeño con consumidor y API propios. La aplicación consumidora <b>ProductWebApp</b> muestra la <i>ficha de un producto</i>; para ello su módulo cliente <code>ProductClient</code> llama a la API <b>ProductCatalogAPI</b> con <code>GET /products/:id</code>. La función de aplicación <code>loadProductView()</code> transforma la respuesta en lo que se muestra al usuario.</p>
+
+<table>
+  <tr><th>Dato que necesita el consumidor</th><th>Cómo lo utiliza</th><th>Matcher en el contrato</th></tr>
+  <tr><td><code>id</code></td><td>Identifica el producto; el cliente exige <code>number</code></td><td><code>like(10)</code> (tipo)</td></tr>
+  <tr><td><code>name</code></td><td>Título de la ficha</td><td><code>string()</code></td></tr>
+  <tr><td><code>price</code></td><td><code>price.toFixed(2)</code> → «49.90 USD»; exige <code>number</code></td><td><code>like(49.9)</code> (tipo)</td></tr>
+  <tr><td><code>currency</code></td><td>Se concatena en la etiqueta de precio</td><td><code>regex('^[A-Z]{3}$')</code></td></tr>
+  <tr><td><code>stock</code></td><td><code>stock &gt; 0</code> → «En stock» / «Agotado»</td><td><code>like(12)</code> (tipo)</td></tr>
+  <tr><td><code>updatedAt</code></td><td>Se convierte a <code>Date</code> → fecha de última actualización</td><td><code>datetime("yyyy-MM-dd'T'HH:mm:ss.SSSX")</code></td></tr>
+  <tr><td><code>error</code> (en 404)</td><td>Si vale <code>PRODUCT_NOT_FOUND</code> el cliente devuelve <code>null</code></td><td>Valor literal exacto</td></tr>
+  <tr><td><code>message</code> (en 404)</td><td>Informativo</td><td><code>string()</code></td></tr>
+</table>
+
+<p>El contrato solo incluye lo que el consumidor usa. Por ejemplo, la respuesta <code>400 INVALID_ID</code> del proveedor no forma parte del contrato porque el consumidor no la utiliza. Esa regla, como el resto de reglas internas, corresponde a pruebas funcionales del proveedor.</p>
+
+<h2>2. Interacciones y justificación</h2>
+<table>
+  <tr><th style="width:4%">#</th><th style="width:20%">Precondición (estado)</th><th style="width:18%">Solicitud</th><th style="width:26%">Respuesta esperada</th><th>Por qué es relevante para el consumidor</th></tr>
+  <tr><td>1</td><td><code>existe el producto con id 10</code></td><td><code>GET /products/10</code><br><code>Accept: application/json</code></td><td><code>200</code>, <code>Content-Type: application/json</code>, cuerpo con <code>id, name, price, currency, stock, updatedAt</code></td><td>Caso exitoso: la ficha necesita todos esos campos con el tipo correcto para formatear precio, disponibilidad y fecha. Se comprueba que el cliente produce <code>{found: true, priceLabel: "49.90 USD", availability: "En stock", lastUpdate: "2026-10-01"}</code>.</td></tr>
+  <tr><td>2</td><td><code>no existe el producto con id 999</code></td><td><code>GET /products/999</code><br><code>Accept: application/json</code></td><td><code>404</code>, <code>{"error": "PRODUCT_NOT_FOUND", "message": &lt;texto&gt;}</code></td><td>Caso alternativo que el consumidor debe interpretar: un producto inexistente <b>no es un error</b> de la aplicación. El cliente devuelve <code>null</code> y la ficha muestra «Producto no disponible». Si el proveedor cambiara el código de error o el estado, el consumidor lo trataría como fallo.</td></tr>
+</table>
+
+<h2>3. Diagrama del flujo</h2>
+<figure>
+<svg viewBox="0 0 760 330" width="100%" xmlns="http://www.w3.org/2000/svg">
+  <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#3a4fd8"/></marker></defs>
+  <rect x="10" y="10" width="300" height="310" rx="10" fill="#eef1fd" stroke="#3a4fd8"/>
+  <text x="160" y="34" text-anchor="middle" font-weight="700" font-size="14" fill="#1d2433">Consumidor · ProductWebApp</text>
+  <text x="160" y="52" text-anchor="middle" font-size="11" fill="#5b6475">npm run test:consumer</text>
+  <rect x="30" y="68" width="260" height="62" rx="6" fill="#fff" stroke="#9aa6e8"/>
+  <text x="160" y="90" text-anchor="middle" font-size="12" font-weight="600">Prueba Jest + loadProductView()</text>
+  <text x="160" y="108" text-anchor="middle" font-size="11">assertions sobre la interpretación</text>
+  <text x="160" y="122" text-anchor="middle" font-size="11">(Product | null, ficha)</text>
+  <rect x="30" y="150" width="260" height="44" rx="6" fill="#fff" stroke="#9aa6e8"/>
+  <text x="160" y="170" text-anchor="middle" font-size="12" font-weight="600">ProductClient (cliente REAL)</text>
+  <text x="160" y="186" text-anchor="middle" font-size="11">fetch GET /products/:id</text>
+  <rect x="30" y="214" width="260" height="44" rx="6" fill="#fff6e0" stroke="#e0a100"/>
+  <text x="160" y="234" text-anchor="middle" font-size="12" font-weight="600">Servidor simulado de Pact</text>
+  <text x="160" y="250" text-anchor="middle" font-size="11">responde según las interacciones</text>
+  <line x1="160" y1="130" x2="160" y2="148" stroke="#3a4fd8" stroke-width="1.6" marker-end="url(#a)"/>
+  <line x1="160" y1="194" x2="160" y2="212" stroke="#3a4fd8" stroke-width="1.6" marker-end="url(#a)"/>
+  <text x="160" y="285" text-anchor="middle" font-size="11" fill="#1d2433">① Las pruebas exitosas GENERAN el contrato</text>
+
+  <rect x="320" y="125" width="120" height="80" rx="6" fill="#fff" stroke="#1d2433" stroke-dasharray="4 3"/>
+  <text x="380" y="150" text-anchor="middle" font-size="12" font-weight="700">Contrato</text>
+  <text x="380" y="167" text-anchor="middle" font-size="9.5">pacts/ProductWebApp-</text>
+  <text x="380" y="180" text-anchor="middle" font-size="9.5">ProductCatalogAPI.json</text>
+  <text x="380" y="195" text-anchor="middle" font-size="9.5" fill="#5b6475">(Pact V4)</text>
+  <path d="M290,236 C310,236 315,205 330,205" fill="none" stroke="#3a4fd8" stroke-width="1.6" marker-end="url(#a)"/>
+
+  <rect x="450" y="10" width="300" height="310" rx="10" fill="#eaf6ee" stroke="#1f7a3d"/>
+  <text x="600" y="34" text-anchor="middle" font-weight="700" font-size="14" fill="#1d2433">Proveedor · ProductCatalogAPI</text>
+  <text x="600" y="52" text-anchor="middle" font-size="11" fill="#5b6475">npm run test:provider</text>
+  <rect x="470" y="68" width="260" height="44" rx="6" fill="#fff" stroke="#7fbf94"/>
+  <text x="600" y="88" text-anchor="middle" font-size="12" font-weight="600">Verifier de Pact</text>
+  <text x="600" y="104" text-anchor="middle" font-size="11">reproduce cada solicitud y compara</text>
+  <rect x="470" y="130" width="260" height="56" rx="6" fill="#fff" stroke="#7fbf94"/>
+  <text x="600" y="150" text-anchor="middle" font-size="12" font-weight="600">State handlers + beforeEach</text>
+  <text x="600" y="166" text-anchor="middle" font-size="10.5">«existe el producto con id 10»</text>
+  <text x="600" y="180" text-anchor="middle" font-size="10.5">«no existe el producto con id 999»</text>
+  <rect x="470" y="204" width="260" height="44" rx="6" fill="#fff" stroke="#7fbf94"/>
+  <text x="600" y="224" text-anchor="middle" font-size="12" font-weight="600">API Express REAL (puerto HTTP)</text>
+  <text x="600" y="240" text-anchor="middle" font-size="11">rutas, controlador, JSON</text>
+  <rect x="470" y="262" width="260" height="34" rx="6" fill="#fff6e0" stroke="#e0a100"/>
+  <text x="600" y="283" text-anchor="middle" font-size="11.5">ProductRepository en memoria (controlado)</text>
+  <line x1="600" y1="112" x2="600" y2="128" stroke="#1f7a3d" stroke-width="1.6" marker-end="url(#a)"/>
+  <line x1="600" y1="186" x2="600" y2="202" stroke="#1f7a3d" stroke-width="1.6" marker-end="url(#a)"/>
+  <line x1="600" y1="248" x2="600" y2="260" stroke="#1f7a3d" stroke-width="1.6" marker-end="url(#a)"/>
+  <text x="600" y="314" text-anchor="middle" font-size="11" fill="#1d2433">② El contrato se VERIFICA contra el proveedor</text>
+<path d="M440,145 C458,145 452,90 468,90" fill="none" stroke="#3a4fd8" stroke-width="1.6" marker-end="url(#a)"/>
+</svg>
+<figcaption>Figura 1. Consumidor, generación del contrato y verificación del proveedor. En amarillo, las dependencias controladas o simuladas.</figcaption>
+</figure>
+
+<h3>Dependencias reales y controladas</h3>
+<table>
+  <tr><th style="width:22%">Fase</th><th>Real</th><th>Controlado / simulado</th></tr>
+  <tr><td>Prueba del consumidor</td><td><code>ProductClient</code> y <code>loadProductView</code> (código de la aplicación), <code>fetch</code> de Node, HTTP</td><td>El proveedor, sustituido por el servidor simulado de Pact</td></tr>
+  <tr><td>Verificación del proveedor</td><td>Aplicación Express completa (rutas, validación, controlador, serialización JSON) escuchando en un puerto real</td><td><code>ProductRepository</code> en memoria, vaciado y sembrado por los estados; las solicitudes las genera el verificador de Pact</td></tr>
+</table>
+<p><b>Estados reproducibles e independientes:</b> el hook <code>beforeEach</code> del <code>Verifier</code> vacía el repositorio antes de cada interacción, y cada <i>state handler</i> construye desde cero los datos que necesita. Por eso el resultado no depende del orden de ejecución: en las capturas el verificador ejecuta primero la interacción 2 y después la 1, y ambas pasan.</p>
+
+<div class="note"><b>Hallazgo sobre los matchers.</b> En la primera versión, <code>price</code> usaba <code>decimal()</code> e <code>id</code>/<code>stock</code> usaban <code>integer()</code>. Al aplicar el cambio incompatible, la verificación <b>pasó igualmente</b>: el core de Pact acepta strings numéricos («49.90», «12») con esos matchers. Como el cliente exige <code>typeof price === 'number'</code>, se cambiaron a <code>like()</code>, que compara el tipo JSON. Con ese ajuste Pact detecta la ruptura (evidencia 4).</div>
+
+<h2 class="pb">4. Evidencias</h2>
+<p>Todas las capturas son de la salida real de la terminal (Git Bash en Windows 11). Se ejecutaron en un <b>clon limpio</b> del repositorio (commit <code>863e5fe</code>), después de <code>npm ci</code>, siguiendo los comandos del README. Los registros completos están en <code>docs/evidencias/*.log</code>.</p>
+
+<div class="ev">
+<h3>Evidencia 0 · Repositorio publicado en GitHub</h3>
+<figure><img src="evidencias/0_github.png"><figcaption>Repositorio público con código del consumidor y del proveedor, pruebas, contrato generado, parche del cambio incompatible y README.</figcaption></figure>
+</div>
+
+<div class="ev">
+<h3>Evidencia 1 · Pruebas del consumidor y generación del contrato</h3>
+<figure><img src="evidencias/1_consumer.png"><figcaption><code>npm run test:consumer</code></figcaption></figure>
+<div class="interp">
+<b>Qué se ejecutó:</b> se borró <code>pacts/</code> y se ejecutó el cliente real <code>ProductClient</code> y <code>loadProductView</code> contra el servidor simulado de Pact, una vez por interacción.<br>
+<b>Qué se esperaba:</b> que el cliente interprete el 200 como un <code>Product</code> con <code>Date</code> y la ficha formateada, y el 404 como <code>null</code> → «Producto no disponible»; y que se genere el archivo de contrato.<br>
+<b>Resultado:</b> <span class="ok">2/2 pruebas pasan</span>. Se generó <code>pacts/ProductWebApp-ProductCatalogAPI.json</code> (especificación V4) con las dos interacciones y sus reglas de matching.
+</div>
+</div>
+
+<div class="ev">
+<h3>Evidencia 2 · Verificación exitosa del proveedor</h3>
+<figure><img src="evidencias/2_provider_ok.png"><figcaption><code>npm run test:provider</code></figcaption></figure>
+<div class="interp">
+<b>Qué se ejecutó:</b> la API Express real en un puerto libre; el <code>Verifier</code> preparó cada estado y reprodujo las solicitudes del contrato.<br>
+<b>Qué se esperaba:</b> estado, cabecera <code>Content-Type</code> y cuerpo compatibles en ambas interacciones.<br>
+<b>Resultado:</b> <span class="ok">404 OK y 200 OK; cabeceras y cuerpos coinciden; 1/1 prueba pasa</span>. Proveedor y consumidor comparten las mismas expectativas.
+</div>
+</div>
+
+<div class="ev">
+<h3>Evidencia 3 · Introducción del cambio incompatible</h3>
+<figure><img src="evidencias/3a_diff.png"><figcaption><code>npm run breaking:apply</code> y <code>git diff</code></figcaption></figure>
+<div class="interp">
+<b>Qué se ejecutó:</b> se aplicó <code>breaking-change/price-as-string.patch</code>, que modifica una línea del proveedor: <code>price</code> pasa de <code>number</code> (49.9) a <code>string</code> («49.90»).<br>
+<b>Por qué rompe al consumidor:</b> <code>ProductClient</code> exige <code>typeof price === 'number'</code> para hacer <code>toFixed(2)</code>; con un string lanzaría <code>ProductApiError</code> y la ficha no se mostraría.
+</div>
+</div>
+
+<div class="ev">
+<h3>Evidencia 4 · Pact detecta la ruptura</h3>
+<figure><img src="evidencias/3_provider_broken.png"><figcaption><code>npm run test:provider</code> con el parche aplicado</figcaption></figure>
+<div class="interp">
+<b>Qué se ejecutó:</b> la misma verificación del proveedor, ahora con el cambio incompatible.<br>
+<b>Qué se esperaba:</b> que la interacción 1 falle en el cuerpo y la interacción 2 siga pasando.<br>
+<b>Resultado:</b> <span class="bad">FAIL</span>. El fallo indica la interacción («una solicitud del producto 10»), el estado y el campo exacto: <code>$.price -&gt; Expected '49.90' (String) to be the same type as 49.9 (Decimal)</code>. La interacción del 404 sigue pasando, porque no depende de <code>price</code>.
+</div>
+</div>
+
+<div class="ev">
+<h3>Evidencia 5 · Restauración de la compatibilidad</h3>
+<figure><img src="evidencias/4a_revert.png"><figcaption><code>npm run breaking:revert</code> y <code>git status --short</code> (sin cambios pendientes)</figcaption></figure>
+<figure><img src="evidencias/4_provider_fixed.png"><figcaption><code>npm run test:provider</code> después de revertir el parche</figcaption></figure>
+<div class="interp">
+<b>Qué se ejecutó:</b> se revirtió el parche, se comprobó con <code>git status</code> que el árbol de trabajo quedó limpio y se repitió la verificación.<br>
+<b>Qué se esperaba:</b> que el proveedor vuelva a cumplir el contrato.<br>
+<b>Resultado:</b> <span class="ok">las dos interacciones pasan otra vez; 1/1 prueba pasa</span>. La versión entregada queda funcional.
+</div>
+</div>
+
+<div class="ev">
+<h3>Evidencia 6 · Demostración automática (ruptura y corrección)</h3>
+<figure><img src="evidencias/5_demo.png"><figcaption><code>npm run demo:breaking</code> (tramo final; la parte con el fallo es igual a la evidencia 4)</figcaption></figure>
+<div class="interp">
+<b>Qué se ejecutó:</b> el script <code>scripts/demo-breaking-change.js</code> aplica el parche, verifica, lo revierte siempre (en un bloque <code>finally</code>, también con Ctrl+C) y vuelve a verificar.<br>
+<b>Resultado:</b> «Proveedor roto → FALLÓ (ruptura detectada por Pact)» y «Proveedor corregido → PASÓ». El script termina con código 0 solo si se cumplen ambas condiciones.
+</div>
+</div>
+
+<h2>5. Reproducción</h2>
+<pre>git clone https://github.com/javier2002guerra-lab/Compatibilidad-entre-consumidor-y-proveedor-con-Pact.git
+cd Compatibilidad-entre-consumidor-y-proveedor-con-Pact
+git checkout v1.0.0
+npm ci
+npm run test:consumer     # genera pacts/ProductWebApp-ProductCatalogAPI.json
+npm run test:provider     # verifica el contrato contra la API real
+npm run demo:breaking     # ruptura detectada + restauración (o: breaking:apply / breaking:revert)</pre>
+<p>Requisitos: Node.js ≥ 18 (probado con 22.10.0) y Git. No se necesitan Pact Broker, base de datos, Docker ni credenciales. El README del repositorio detalla versiones, estados y el procedimiento manual.</p>
+
+<h2>6. Conclusiones</h2>
+<p>Se verificaron las dos partes del acuerdo. El consumidor generó el contrato desde sus pruebas, usando el cliente real y comprobando cómo interpreta cada respuesta. El proveedor lo verificó con estados independientes del orden. El cambio de tipo de <code>price</code> produjo un fallo identificable que señala el campo exacto, y al revertirlo la verificación volvió a pasar.</p>
+<p>La práctica también mostró que elegir el matcher importa: un matcher que parece más estricto (<code>decimal</code>) no protegía el tipo que el cliente necesita, y el de tipo (<code>like</code>) sí.</p>
+
+</body>
+</html>
